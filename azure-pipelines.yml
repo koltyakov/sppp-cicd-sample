@@ -1,0 +1,129 @@
+# Trigger only in commits to `dev` & `master` branches
+# The pipeline shows the simplest git flow:
+#  - run build & tests on commits to `dev`
+#  - do everything as with `dev` case
+#    plus run assets publishing to SharePoint environment(s)
+trigger:
+  - master
+  - dev
+
+jobs:
+
+  # Continues integration pipeline runs tests, build, and artifacts publishing (to reuse in CD pipeline(s))
+  - job: "CI"
+    pool:
+      vmImage: 'ubuntu-latest'
+
+    variables:
+      # This environment variable forces `node-sp-auth-config` working in headless mode
+      # so it won't intend prompting any credentials properties which can ba detrimental
+      # in a headless environment as CI/CD pipeline https://github.com/koltyakov/node-sp-auth-config#production-runtime
+      SPAUTH_ENV: 'production'
+
+    steps:
+
+    - task: NodeTool@0
+      inputs:
+        versionSpec: '10.x'
+      displayName: 'Install Node.js'
+
+    - script: npm ci
+      displayName: 'Restore dependencies'
+
+    # Lint & Build once per all possible sites
+    # When publishing, SPPP updates some "hardcoded" places with relevant data
+    # for example, CEWP in dist folder contain `href=` and `src=` to a specific site
+    # which is dynamically updated during `npm run publish` task execution
+    - script: npm run build
+      displayName: 'Build'
+
+    # It's cool to have some tests in the project
+    # E2E or integration tests might need auth context
+    # Also, this shows a way to bind auth through environment variables
+    # see more https://github.com/koltyakov/node-sp-auth-config#environment-variables
+    # - script: npm run test
+    #   displayName: 'Run tests'
+    #   env:
+    #     SPAUTH_SITEURL: $(ci.sp.siteurl)
+    #     SPAUTH_USERNAME: $(ci.sp.username)
+    #     SPAUTH_PASSWORD: $(ci.sp.password)
+    #   timeoutInMinutes: 15
+
+    # Built artifacts from `./dist` are pushed to CD artifacts
+    # and used by a separate delivery pipelines within environment matrix
+    - task: PublishPipelineArtifact@1
+      displayName: 'Publishing build artifacts'
+      inputs:
+        artifact: 'dist'
+        targetPath: './dist'
+
+  # Continues delivery pipeline publishes client-side assets to SharePoint
+  # Multiple environments support is represented as a martrix
+  # as a simplest to duplicate identical pipeline with different inputs
+  - job: "CD"
+    pool:
+      vmImage: 'ubuntu-latest'
+
+    # Guarantee no CD starts before CI job
+    dependsOn: 'CI'
+
+    # "Publish only on commits to master" rule and only on succeeded previous steps
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/master'))
+
+    variables:
+      # Prevent any prompts from auth library
+      SPAUTH_ENV: 'production'
+
+    strategy:
+      maxParallel: 3
+      # Deployment environments matrix
+      # Each environment is represented as a separate matrix element
+      # Credentials are passed as a multiline value which should be a valid JSON string
+      # so different auth strategies can be easily mixed without extra boilerplate
+      matrix:
+        SPEnv01:
+          private.json: |
+            {
+              "siteUrl": "$(ci.sp.siteurl-env1)",
+              "username": "$(ci.sp.username)",
+              "password": "$(ci.sp.password)"
+            }
+        SPEnv02:
+          private.json: |
+            {
+              "siteUrl": "$(ci.sp.siteurl-env2)",
+              "username": "$(ci.sp.username)",
+              "password": "$(ci.sp.password)"
+            }
+
+    steps:
+
+    - task: NodeTool@0
+      inputs:
+        versionSpec: '10.x'
+      displayName: 'Install Node.js'
+
+    - script: npm ci && npm i -g gulp
+      displayName: 'Restore dependencies'
+
+    # Getting build artifacts and place them to `./dist` folder
+    - task: DownloadPipelineArtifact@2
+      displayName: 'Getting build artifacts'
+      inputs:
+        artifactName: 'dist'
+        targetPath: './dist'
+
+    # Binding authentication to be used during assets publishing
+    - script: |
+        # Creating private file from multiline variable from matrix
+        touch ./config/private.json && cat <<EOF > ./config/private.json
+        $(private.json)
+        EOF
+        # Encoding secrets in private file
+        SPAUTH_ENV=production gulp config
+      displayName: 'Establishing connection'
+
+    # Publish assets to SharePoint environment
+    - script: npm run publish
+      displayName: 'Publish assets to SharePoint'
+      timeoutInMinutes: 15
