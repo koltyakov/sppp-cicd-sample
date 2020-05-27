@@ -1,0 +1,14 @@
+{
+  "generator-sppp": {
+    "app.name": "sppp-cicd-sample",
+    "sppp.version": "3.9.2",
+    "app.description": "CI/CD sample for SPPP projects",
+    "app.author": "Andrew Koltyakov <andrew.koltyakov@gmail.com>",
+    "conf.spFolder": "_catalogs/masterpage/sppp",
+    "conf.distFolder": "./dist",
+    "conf.additional.sslCerts": false,
+    "conf.additional.customTasks": false,
+    "conf.additional.presets": [],
+    "conf.additional.confPresets": []
+  }
+}
