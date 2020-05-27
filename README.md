@@ -27,8 +27,8 @@ Values like `$(ci.sp.siteurl-env1)` are environment variables. `$(...)` is the s
 
 ## Configuring pipeline in DevOps portal
 
-1\. Modify the matrix to represent environments
-2\. Create new pipeline in Azure DevOps
-3\. Add the repository as a source
-4\. Use `yml` as the pipeline definition
-5\. Create as many environment variables as needed, make sure `Keep this value secret` is toggled on
+1. Modify the matrix to represent environments
+2. Create new pipeline in Azure DevOps
+3. Add the repository as a source
+4. Use `yml` as the pipeline definition
+5. Create as many environment variables as needed, make sure `Keep this value secret` is toggled on
