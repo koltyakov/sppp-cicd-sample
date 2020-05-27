@@ -1,0 +1,72 @@
+# Trigger only in commits to `dev` & `master` branches
+# The pipeline shows the simplest git flow:
+#  - run build & tests on commits to `dev`
+#  - do everything as with `dev` case
+#    plus run assets publishing to SharePoint evironment(s)
+trigger:
+  - master
+  - dev
+
+  pool:
+    vmImage: 'ubuntu-latest'
+
+  variables:
+    # This environment variable forces `node-sp-auth-config` working in headless mode
+    # so it won't intend prompting any credentials properties which can ba detrimental
+    # in a headless environment as CI/CD pipeline
+    SPAUTH_ENV: 'production'
+
+  steps:
+  - task: NodeTool@0
+    inputs:
+      versionSpec: '10.x'
+    displayName: 'Install Node.js'
+
+  # It's better using CI to restore locked devendencies
+  - script: npm ci
+    displayName: 'Restore dependencies'
+
+  ## Lint & Build once per all possible sites
+  ## When publishing, SPPP updates some "hardcoded" places with relevant data
+  ## for example, CEWP in dist folder contain `href=` and `src=` to a specific site
+  ## which is dynamically updated during `npm run publish` task execution
+  - script: npm run build
+    displayName: 'Build'
+
+  # It's cool to have some tests in the project
+  # E2E or integration tests might need auth context
+  # - script: npm run test
+  #   displayName: 'Run tests'
+  #   env:
+  #     SPAUTH_SITEURL: $(ci.sp.siteurl)
+  #     SPAUTH_USERNAME: $(ci.sp.username)
+  #     SPAUTH_PASSWORD: $(ci.sp.password)
+  #   timeoutInMinutes: 15
+
+  # Built artifacts from `./dist` folder can be pushed to CD artifacts
+  # and used by a separate delivery pipeline
+  # In current sample this step is omitted and delivery to combined wih CI
+
+  # Publish assets to SharePoint environment
+  - script: npm run publish
+    displayName: 'Publish assets to SharePoint'
+    dependsOn: Build'
+    # Define timeout for potentially heavy or long running steps
+    timeoutInMinutes: 15
+    # "Publish only on commits to master" rule and only on succeeded previous steps
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/master'))
+    strategy:
+      # Deployment environments matrix
+      matrix:
+        SPEnv01:
+          env:
+            # `node-sp-auth-config` properties binding via environment variables
+            # see more: https://github.com/koltyakov/node-sp-auth-config#environment-variables
+            SPAUTH_SITEURL: $(ci.sp.siteurl-env1)
+            SPAUTH_USERNAME: $(ci.sp.username)
+            SPAUTH_PASSWORD: $(ci.sp.password)
+        SPEnv02:
+          env:
+            SPAUTH_SITEURL: $(ci.sp.siteurl-env2)
+            SPAUTH_USERNAME: $(ci.sp.username)
+            SPAUTH_PASSWORD: $(ci.sp.password)
