@@ -14,8 +14,8 @@ Yeoman generator for SharePoint client-side applications. [See more](https://git
 
 The sample shows the simplest git-flow pipeline:
 
-- run build & tests on commits to `dev`
-- do everything as with `dev` case plus run assets publishing to SharePoint environment(s)
+- commit to `dev` branch: run build & tests (CI pipeline)
+- commit to `master` branch: do CI pipeline case plus run assets publishing to SharePoint environment(s)
 
 The pipeline is job-based with a separation to CI and CD part.
 
